@@ -67,3 +67,75 @@ export const updateHostSystem = async (id: string, system: HostSystemInfo): Prom
 export const saveHost = async (input: HostInput, id?: string): Promise<CloudHost> =>
   (await api<{ host: CloudHost }>(id ? `/api/hosts/${id}` : '/api/hosts', id ? 'PUT' : 'POST', input)).host;
 export const removeHost = (id: string): Promise<{ ok: boolean }> => api(`/api/hosts/${id}`, 'DELETE');
+
+export type BackupFrequency = 'hourly' | 'daily' | 'weekly';
+
+export interface BackupSchedule {
+  frequency: BackupFrequency;
+  hour: number;
+  weekday: number;
+  timeZone: string;
+}
+
+export interface BackupSettingsView {
+  enabled: boolean;
+  url: string;
+  username: string;
+  prefix: string;
+  keep: number;
+  schedule: BackupSchedule;
+  hasPassword: boolean;
+  hasPassphrase: boolean;
+}
+
+export interface BackupSettingsInput {
+  enabled: boolean;
+  url: string;
+  username: string;
+  password?: string;
+  passphrase?: string;
+  prefix: string;
+  keep: number;
+  schedule: BackupSchedule;
+}
+
+export interface BackupCounts { hosts: number; snippets: number; forwardRules: number }
+
+export interface BackupRun {
+  id: string;
+  startedAt: number;
+  trigger: 'manual' | 'scheduled';
+  status: 'success' | 'failure';
+  remoteName: string | null;
+  size: number | null;
+  counts: BackupCounts | null;
+  error: string | null;
+}
+
+export interface RemoteBackupFile { name: string; size: number; modifiedAt: number }
+
+export interface RestoreSummary {
+  hosts: { restored: number; skipped: number };
+  snippets: { restored: number; skipped: number };
+  forwardRules: { restored: number; skipped: number };
+}
+
+export interface RestoreResult { summary: RestoreSummary; counts: BackupCounts; createdAt: number }
+
+export const loadBackupSettings = (): Promise<{
+  settings: BackupSettingsView | null; history: BackupRun[]; lastSuccessAt: number | null; nextRunAt: number | null;
+}> => api('/api/backup/settings');
+export const saveBackupSettings = (input: BackupSettingsInput): Promise<{ settings: BackupSettingsView; nextRunAt: number | null }> =>
+  api('/api/backup/settings', 'PUT', input);
+export const removeBackupSettings = (): Promise<{ ok: boolean }> => api('/api/backup/settings', 'DELETE');
+export const testBackupTarget = (input: BackupSettingsInput): Promise<{ ok: boolean }> => api('/api/backup/test', 'POST', input);
+export const runBackupNow = (): Promise<{ run: BackupRun; history: BackupRun[]; nextRunAt: number | null }> =>
+  api('/api/backup/run', 'POST');
+export const listRemoteBackups = async (): Promise<RemoteBackupFile[]> =>
+  (await api<{ files: RemoteBackupFile[] }>('/api/backup/remote')).files;
+export const restoreRemoteBackup = (name: string, mode: 'merge' | 'replace', passphrase?: string): Promise<RestoreResult> =>
+  api('/api/backup/restore', 'POST', { name, mode, ...(passphrase ? { passphrase } : {}) });
+export const exportBackup = (passphrase: string): Promise<{ envelope: unknown; filename: string; counts: BackupCounts }> =>
+  api('/api/backup/export', 'POST', { passphrase });
+export const importBackup = (envelope: unknown, passphrase: string, mode: 'merge' | 'replace'): Promise<RestoreResult> =>
+  api('/api/backup/import', 'POST', { envelope, passphrase, mode });

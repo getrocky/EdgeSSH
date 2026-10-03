@@ -3,6 +3,7 @@ import type { HostGlobe } from './globe';
 import type { FilePage } from './file-page';
 import type { Snippets } from './snippets';
 import { ForwardPage } from './forward-page';
+import { BackupPage } from './backup-page';
 import { countryFlag } from './flags';
 import { systemIcon } from './os-icons';
 import './dashboard.css';
@@ -26,6 +27,7 @@ const icons = {
   shield: '<path d="m12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6Z"/><path d="m8 12 3 3 5-6"/>',
   search: '<circle cx="10" cy="10" r="6"/><path d="m15 15 5 5"/>',
   refresh: '<path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/>',
+  backup: '<path d="M12 3v12"/><path d="m8 11 4 4 4-4"/><path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/>',
 };
 function icon(name: keyof typeof icons): string { return `<svg viewBox="0 0 24 24" aria-hidden="true">${icons[name]}</svg>`; }
 
@@ -43,6 +45,7 @@ export class Dashboard {
   private readonly dialog: HTMLDialogElement;
   private readonly form: HTMLFormElement;
   private readonly forwarding = new ForwardPage();
+  private readonly backup = new BackupPage();
 
   constructor(private readonly actions: DashboardActions) {
     this.root.id = 'dashboard';
@@ -60,6 +63,7 @@ export class Dashboard {
           <button class="rail-item" id="rail-files">${icon('folder')}<span>文件管理</span></button>
           <button class="rail-item" id="rail-snippets">${icon('snippets')}<span>代码片段</span></button>
           <button class="rail-item" id="rail-forward">${icon('forward')}<span>端口转发</span></button>
+          <button class="rail-item" id="rail-backup">${icon('backup')}<span>在线备份</span></button>
           <button class="rail-item" id="quick-connect">${icon('terminal')}<span>快速连接</span></button>
           <span class="rail-security" title="管理员身份认证">${icon('shield')}<span id="auth-provider-label">身份<br>保护</span></span>
         </nav>
@@ -115,6 +119,7 @@ export class Dashboard {
     this.get('.home-layout').append(this.actions.files.root);
     this.get('.home-layout').append(this.actions.snippets.page);
     this.get('.home-layout').append(this.forwarding.root);
+    this.get('.home-layout').append(this.backup.root);
     this.dialog = this.get<HTMLDialogElement>('#host-editor-dialog');
     this.form = this.get<HTMLFormElement>('#cloud-host-form');
     this.get('#account-action').addEventListener('click', async (event) => {
@@ -141,6 +146,9 @@ export class Dashboard {
     this.get('#rail-files').addEventListener('click', () => this.showFiles());
     this.get('#rail-snippets').addEventListener('click', () => this.showSnippets());
     this.get('#rail-forward').addEventListener('click', () => this.showForwarding());
+    this.get('#rail-backup').addEventListener('click', () => this.showBackup());
+    // 恢复会改写主机与片段，重新拉取一次让界面与数据库一致。
+    window.addEventListener('backup-restored', () => { void this.refresh(); this.actions.snippets.load(); });
     for (const id of ['#quick-connect', '#bottom-quick']) this.get(id).addEventListener('click', () => {
       if (this.busy || !this.actions.files.confirmLeave()) return;
       this.actions.leaveWorkspace();
@@ -225,6 +233,7 @@ export class Dashboard {
 
   show(): void {
     this.forwarding.hide();
+    this.backup.hide();
     this.actions.files.hide();
     this.actions.snippets.hide();
     this.isHome = true; this.root.hidden = false;
@@ -237,6 +246,7 @@ export class Dashboard {
 
   openWorkspace(): void {
     this.forwarding.hide();
+    this.backup.hide();
     this.actions.files.hide();
     this.actions.snippets.hide();
     this.isHome = false; this.root.hidden = true;
@@ -249,6 +259,7 @@ export class Dashboard {
 
   showFiles(): void {
     this.forwarding.hide();
+    this.backup.hide();
     this.actions.snippets.hide();
     this.isHome = false; this.root.hidden = false;
     this.get('.home-content').hidden = true;
@@ -262,6 +273,7 @@ export class Dashboard {
   showSnippets(): void {
     if (!this.actions.files.confirmLeave()) return;
     this.forwarding.hide();
+    this.backup.hide();
     // 仅切换视图，不结束 SSH；在片段页编辑后可回到同一会话。
     this.actions.files.hide();
     this.isHome = false; this.root.hidden = false;
@@ -275,6 +287,7 @@ export class Dashboard {
 
   showForwarding(): void {
     if (!this.actions.files.confirmLeave()) return;
+    this.backup.hide();
     this.actions.files.hide();
     this.actions.snippets.hide();
     this.isHome = false; this.root.hidden = false;
@@ -284,6 +297,20 @@ export class Dashboard {
     this.selectNavigation('rail-forward');
     this.globe?.setActive(false);
     this.forwarding.show();
+  }
+
+  showBackup(): void {
+    if (!this.actions.files.confirmLeave()) return;
+    this.forwarding.hide();
+    this.actions.files.hide();
+    this.actions.snippets.hide();
+    this.isHome = false; this.root.hidden = false;
+    this.get('.home-content').hidden = true;
+    document.getElementById('app')!.hidden = true;
+    document.body.dataset.view = 'backup';
+    this.selectNavigation('rail-backup');
+    this.globe?.setActive(false);
+    this.backup.show();
   }
 
   private selectNavigation(id: string): void {
@@ -301,13 +328,14 @@ export class Dashboard {
   private signedOut(): void {
     this.actions.leaveWorkspace();
     this.actions.snippets.clear();
+    this.backup.clear();
     this.authenticated = false;
     this.get('#account-label').textContent = '未登录';
     const action = this.get<HTMLAnchorElement>('#account-action');
     action.href = '/auth/login'; action.textContent = '登录'; action.title = '管理员登录';
     this.setHosts([]);
     this.get('#host-list').textContent = '请点击右上角「登录」验证管理员身份。';
-    this.root.querySelectorAll<HTMLButtonElement>('[data-add], #quick-connect, #bottom-quick, #rail-snippets').forEach((button) => { button.disabled = true; });
+    this.root.querySelectorAll<HTMLButtonElement>('[data-add], #quick-connect, #bottom-quick, #rail-snippets, #rail-backup').forEach((button) => { button.disabled = true; });
     this.show();
   }
 

@@ -1,8 +1,8 @@
-import { parseConnectMessage, type Env } from '../types';
-import { decryptHost, encryptHost } from './crypto';
-import { APIError, json, readJSON } from './http';
-import { locateHost, type HostLocation } from './location';
-import type { SystemInfo } from '../backend/system-info';
+import { parseConnectMessage, type Env } from '../types.ts';
+import { decryptHost, encryptHost } from './crypto.ts';
+import { APIError, json, readJSON } from './http.ts';
+import { locateHost, type HostLocation } from './location.ts';
+import type { SystemInfo } from '../backend/system-info.ts';
 
 export interface HostPayload {
   name: string;
@@ -79,6 +79,34 @@ function validate(body: Record<string, unknown>, previous?: HostPayload): HostPa
     locationCheckedAt: previous?.locationCheckedAt,
     system: previous?.host === connection.host ? previous.system ?? null : null,
   };
+}
+
+/**
+ * 恢复备份时复用同一套校验，避免备份文件里的记录绕过主机规则。
+ * location / system 是缓存数据，按原值保留，不在恢复时重新发起外部查询。
+ */
+export function validateHostPayload(body: Record<string, unknown>): HostPayload {
+  const payload = validate(body);
+  const location = body.location;
+  if (location && typeof location === 'object' && !Array.isArray(location)) {
+    const raw = location as Record<string, unknown>;
+    const latitude = Number(raw.latitude), longitude = Number(raw.longitude);
+    const code = String(raw.countryCode ?? '').toUpperCase();
+    if (Number.isFinite(latitude) && Number.isFinite(longitude) && Math.abs(latitude) <= 90 && Math.abs(longitude) <= 180) {
+      payload.location = {
+        ip: String(raw.ip ?? '').slice(0, 100), city: String(raw.city ?? '').slice(0, 100),
+        region: String(raw.region ?? '').slice(0, 100), country: String(raw.country ?? '').slice(0, 100),
+        countryCode: /^[A-Z]{2}$/.test(code) ? code : '', latitude, longitude,
+      };
+    }
+  }
+  if (typeof body.locationCheckedAt === 'number' && Number.isFinite(body.locationCheckedAt)) {
+    payload.locationCheckedAt = body.locationCheckedAt;
+  }
+  if (body.system && typeof body.system === 'object' && !Array.isArray(body.system)) {
+    try { payload.system = systemInfo(body.system as Record<string, unknown>); } catch { payload.system = null; }
+  }
+  return payload;
 }
 
 export async function hostsRoute(request: Request, env: Env, accountId: string, pathname: string): Promise<Response> {

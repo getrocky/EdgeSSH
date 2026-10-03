@@ -7,6 +7,10 @@ import { authProvider } from './accounts/auth-provider';
 import { hostsRoute } from './accounts/hosts';
 import { snippetsRoute } from './accounts/snippets';
 import { forwardRulesRoute } from './accounts/forward-rules';
+import { backupRoute } from './accounts/backup-routes';
+import { lastSuccessAt, loadSettings, runBackup } from './accounts/backup';
+import { shouldRun } from './accounts/backup-schedule';
+import { workspaceState } from './accounts/workspace';
 import { apiFailure, json } from './accounts/http';
 import { locateHost } from './accounts/location';
 import { forwardingRoute, trustedForwardRoute } from './forwarding/routes';
@@ -161,6 +165,7 @@ export default {
       if (url.pathname.startsWith('/api/hosts')) return await hostsRoute(request, env, account!.id, url.pathname);
       if (url.pathname.startsWith('/api/snippets')) return await snippetsRoute(request, env, account!.id, url.pathname);
       if (url.pathname.startsWith('/api/forward-rules')) return await forwardRulesRoute(request, env, account!.id, url.pathname);
+      if (url.pathname.startsWith('/api/backup')) return await backupRoute(request, env, account!.id, url.pathname);
       if (url.pathname === '/api/forwarding') return await forwardingRoute(request, env, account!.id);
       if (url.pathname === '/api/session') {
         if (request.method !== 'POST') return corsResponse(jsonError('Method not allowed', 405));
@@ -187,5 +192,22 @@ export default {
       const response = apiFailure(error);
       return isApiRequest ? corsResponse(response) : response;
     }
+  },
+
+  // Cron 每小时触发；具体时间表存在 D1，由用户在界面设置，这里判断本次是否该备份。
+  // 没有请求上下文，所以直接从 workspace_state 取固定的管理员账户。
+  async scheduled(event: ScheduledController, env: Env, ctx: ExecutionContext): Promise<void> {
+    ctx.waitUntil((async () => {
+      try {
+        const workspace = await workspaceState(env);
+        const settings = await loadSettings(env, workspace.accountId);
+        if (!settings?.enabled) return;
+        const now = event.scheduledTime ?? Date.now();
+        if (!shouldRun(now, settings.schedule, await lastSuccessAt(env, workspace.accountId))) return;
+        await runBackup(env, workspace.accountId, settings, 'scheduled');
+      } catch {
+        // 失败原因已写入 backup_runs，前端可见；这里不再抛出，避免 Cron 重复告警。
+      }
+    })());
   },
 };

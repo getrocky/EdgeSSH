@@ -140,6 +140,17 @@ EdgeSSH-Auto-Update: true
 - 旧部署无需重新输入邮箱，也不要求复制 Secret 回 GitHub；同为 Cloudflare 模式的普通重部署会实际探测入口仍受 Access 保护并保留现有 Secret，不要求新增 Zero Trust API 权限。首次启用或从 GitHub 切回时才从 Access 应用核对 Team Domain、AUD 与策略；任何路径都不会仅凭 Secret 名称判定有效，也不会改写人工维护的 IdP 或身份策略。
 - 若需要自动创建/管理 Access，或更换 hostname，请提供 `ADMIN_EMAIL`。自动管理使用账户级 Access API；原有 Zone 级应用请先核对，不要在同一 hostname 叠加应用。
 - 切换认证方式不改变 `ENCRYPTION_KEY`、D1 和管理员资料所有者。不要通过更换密钥来切换登录方式。
+- **推荐改用「在线备份」做灾备，而不是依赖 `ENCRYPTION_KEY` 本身。** 备份包用独立的备份口令加密（PBKDF2-SHA256 + AES-256-GCM），不依赖 Worker Secret，因此即使密钥丢失或换到全新 Cloudflare 账户也能恢复主机、代码片段和转发规则。配置入口在 Dashboard 左侧「在线备份」。
+
+## 在线备份（WebDAV）
+
+- 部署会自动应用 `migrations/0005_backup.sql`，并注册**每小时**一次的 Cron Trigger（`wrangler.toml` 的 `[triggers]`）。未配置 WebDAV 或关闭自动备份时，该触发器只做一次 D1 查询就返回，不产生外部请求。
+- 备份时间表（每小时／每天／每周 + 时间点 + 时区）由管理员在界面设置并存入 D1，`scheduled()` 每次触发判断本次是否到点。**修改时间表立即生效，不需要重新部署**；Cron 表达式本身不通过运行时 API 修改，Worker 不持有任何 Cloudflare API Token。
+- 错过的周期会在下一小时补跑，不会整天跳过；同一周期内只备份一次，手动备份也会推迟当期的自动备份。
+- WebDAV 地址与账号密码加密保存在 D1（复用 `ENCRYPTION_KEY`），仅备份包本身使用独立口令。接口不回传密码与口令明文，只回报是否已设置。
+- 地址必须是 HTTPS，且不允许私网、回环、链路本地（含 `169.254.169.254` 等 metadata 地址）与 IPv4 映射地址；请求不跟随重定向，避免成为 SSRF 入口。
+- **备份口令丢失后无法恢复备份内容，请离线保存。** 修改口令后，旧备份仍需用旧口令恢复。
+- 不想依赖外部服务时，可用「导出到本地」得到同格式的加密 JSON，再通过「从文件恢复」导入。
 
 ## 切换登录方式，保留同一管理员资料
 

@@ -32,3 +32,8 @@ binding = "DB"
 database_name = "edgessh-accounts"
 # 部署脚本在目标账户中查找或创建数据库，不把账户专属 ID 留在模板里。
 migrations_dir = "migrations"
+
+# 每小时触发一次；具体备份时间表由用户在界面设置并存入 D1，
+# scheduled() 判断本次是否到点。未配置备份时该触发器立即返回。
+[triggers]
+crons = ["20 * * * *"]

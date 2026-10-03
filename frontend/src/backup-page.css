@@ -1,0 +1,57 @@
+/* style.css 给 body 设了 height:100%/overflow:hidden（终端工作台需要）。
+ * 备份页内容高于一屏，这里按视图解除高度锁定，让页面能正常滚动。 */
+body[data-view='backup'] { height: auto; min-height: 100%; overflow-y: auto; background: var(--home-bg); }
+body[data-view='backup'] #dashboard, body[data-view='backup'] .home-layout { height: auto; }
+.backup-page { min-width: 0; width: 100%; max-width: 1240px; margin-inline: auto; padding: 36px 32px; }
+.backup-page .home-section-heading { align-items: center; }
+.backup-grid { display: grid; grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); align-items: start; gap: 22px; margin-top: 24px; }
+.backup-card { padding: 24px; border: 1px solid var(--home-line); border-radius: 12px; background: var(--home-surface); }
+.backup-card h2 { margin: 0 0 4px; font-size: 17px; }
+.backup-card > p { margin: 0 0 18px; color: var(--home-muted); font-size: 13px; line-height: 1.8; }
+.backup-fields { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 15px; }
+.backup-fields label { display: grid; gap: 7px; font-weight: 600; font-size: 14px; }
+.backup-fields label.wide { grid-column: 1 / -1; }
+#dashboard .backup-fields :is(input, select) { width: 100%; min-width: 0; height: 44px; padding: 8px 10px; border: 1px solid var(--home-line); border-radius: 6px; background: var(--home-bg); color: var(--home-ink); font-size: 15px; }
+.backup-fields small { color: var(--home-muted); font-size: 12px; font-weight: 400; line-height: 1.7; }
+.backup-toggle { display: flex; align-items: flex-start; gap: 10px; grid-column: 1 / -1; font-size: 14px; font-weight: 400; line-height: 1.7; }
+#dashboard .backup-toggle input { width: 18px; height: 18px; flex: 0 0 18px; margin-top: 2px; accent-color: var(--home-accent); }
+.backup-actions { display: flex; flex-wrap: wrap; gap: 10px; border-top: 1px solid var(--home-line); padding-top: 18px; margin-top: 20px; }
+#dashboard .backup-page .home-button { min-height: 44px; }
+.backup-note { border: 1px solid var(--home-accent); border-left-width: 4px; border-radius: 8px; padding: 14px 18px; margin: 0 0 18px; background: var(--home-accent-soft); line-height: 1.75; }
+.backup-note strong { display: block; margin-bottom: 6px; }
+.backup-note p { margin: 0; font-size: 13px; }
+.backup-status { margin-top: 16px; color: var(--home-muted); font-size: 13px; line-height: 1.8; overflow-wrap: anywhere; }
+.backup-status:empty { display: none; }
+.backup-status.is-error { color: #b3261e; font-weight: 600; }
+.backup-status.is-ok { color: var(--home-accent-hover); font-weight: 600; }
+.backup-list { display: grid; gap: 10px; }
+.backup-row { display: flex; align-items: center; gap: 12px; min-width: 0; padding: 13px 15px; border: 1px solid var(--home-line); border-radius: 10px; background: var(--home-bg); }
+.backup-row-copy { display: grid; flex: 1; min-width: 0; gap: 3px; }
+.backup-row-copy strong { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--home-mono); }
+.backup-row-copy small { color: var(--home-muted); font-size: 12px; }
+.backup-dot { flex: 0 0 8px; width: 8px; height: 8px; border-radius: 50%; background: #2e9e5b; }
+.backup-dot.is-failure { background: #b3261e; }
+.backup-empty { padding: 32px 20px; border: 1px dashed var(--home-line); border-radius: 10px; text-align: center; color: var(--home-muted); }
+.backup-page code { font-family: var(--home-mono); }
+.backup-page [hidden] { display: none !important; }
+.backup-restore-dialog { width: min(520px, calc(100vw - 32px)); }
+.backup-restore-dialog .backup-fields { grid-template-columns: minmax(0, 1fr); margin: 18px 0; }
+.backup-modes { display: grid; gap: 10px; margin: 4px 0 0; }
+.backup-mode { display: flex; align-items: flex-start; gap: 10px; padding: 12px 14px; border: 1px solid var(--home-line); border-radius: 8px; background: var(--home-bg); font-weight: 400; line-height: 1.65; cursor: pointer; }
+.backup-mode:has(input:checked) { border-color: var(--home-accent); background: var(--home-accent-soft); }
+#dashboard .backup-mode input { width: 18px; height: 18px; flex: 0 0 18px; margin-top: 2px; accent-color: var(--home-accent); }
+.backup-mode small { display: block; margin-top: 3px; color: var(--home-muted); font-size: 12px; }
+@media (max-width: 950px) { .backup-grid { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 600px) {
+  .backup-page { padding: 24px 16px; }
+  .backup-page .home-section-heading { align-items: start; flex-direction: column; }
+  .backup-fields { grid-template-columns: minmax(0, 1fr); }
+  .backup-card { padding: 18px; }
+}
+.backup-schedule { display: grid; gap: 8px; padding: 14px; border: 1px solid var(--home-line); border-radius: 8px; background: var(--home-bg); }
+.backup-schedule-fields { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.backup-schedule-fields label { display: grid; gap: 6px; font-size: 13px; font-weight: 600; }
+.backup-schedule small { color: var(--home-muted); font-size: 12px; font-weight: 400; line-height: 1.7; }
+.backup-next { margin: 14px 0 0; color: var(--home-accent-hover); font-size: 13px; font-weight: 600; }
+.backup-next:empty { display: none; }
+@media (max-width: 600px) { .backup-schedule-fields { grid-template-columns: minmax(0, 1fr); } }
