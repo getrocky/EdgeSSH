@@ -5,7 +5,13 @@ const decoder = new TextDecoder();
 
 export const BACKUP_FORMAT = 'edgessh-backup';
 export const BACKUP_VERSION = 1;
-const PBKDF2_ITERATIONS = 310_000;
+// Workers 的 Web Crypto 把 PBKDF2 迭代数硬限制在 10 万，超过会直接抛异常
+// （workerd#1346）。OWASP 建议更高，但这是运行时上限，只能取到边界值。
+const PBKDF2_ITERATIONS = 100_000;
+// 解包时的下限放宽到 1 万：迭代数读自文件本身，要能打开别处用更低或更高
+// 参数生成的备份包，不受本地常量约束。
+const MIN_ACCEPTED_ITERATIONS = 10_000;
+const MAX_ACCEPTED_ITERATIONS = 1_000_000;
 const SALT_BYTES = 16;
 const IV_BYTES = 12;
 export const MIN_PASSPHRASE_LENGTH = 12;
@@ -112,8 +118,10 @@ export function parseEnvelope(value: unknown): BackupEnvelope {
   if (!kdf || kdf.name !== 'PBKDF2' || kdf.hash !== 'SHA-256' || typeof kdf.salt !== 'string') {
     throw new APIError('备份文件的密钥参数无效。');
   }
-  // 上限防止构造超大迭代数的文件耗尽 Worker CPU。
-  if (typeof kdf.iterations !== 'number' || !Number.isInteger(kdf.iterations) || kdf.iterations < 100_000 || kdf.iterations > 1_000_000) {
+  // 上限防止构造超大迭代数的文件耗尽 Worker CPU；注意超过 10 万的包本地也解不开，
+  // 会在 openBackup 里按解密失败处理，这里只拦明显非法的参数。
+  if (typeof kdf.iterations !== 'number' || !Number.isInteger(kdf.iterations)
+    || kdf.iterations < MIN_ACCEPTED_ITERATIONS || kdf.iterations > MAX_ACCEPTED_ITERATIONS) {
     throw new APIError('备份文件的密钥参数无效。');
   }
   if (envelope.cipher !== 'AES-GCM' || typeof envelope.iv !== 'string' || typeof envelope.ciphertext !== 'string') {

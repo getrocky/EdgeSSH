@@ -37,6 +37,26 @@ test('口令长度受限', () => {
   assert.equal(validatePassphrase('  keeps spaces  '), '  keeps spaces  ');
 });
 
+test('迭代数不超过 Workers 的 PBKDF2 上限', async () => {
+  // Workers 的 Web Crypto 把 PBKDF2 迭代数硬限制在 10 万（workerd#1346），
+  // 超过会在运行时直接抛异常。Node 没有这个限制，所以必须显式固定住这个约束，
+  // 否则本地测试全绿、线上备份全部失败。
+  const envelope = await sealBackup(contents, 'correct horse battery');
+  assert.equal(envelope.kdf.name, 'PBKDF2');
+  assert.ok(envelope.kdf.iterations <= 100_000,
+    `迭代数 ${envelope.kdf.iterations} 超过 Workers 上限 100000，线上会加密失败`);
+  // 同时保证没有被调得过低。
+  assert.ok(envelope.kdf.iterations >= 100_000, '迭代数不应低于 Workers 允许的上限值');
+});
+
+test('能打开用其他迭代数生成的备份包', async () => {
+  // 迭代数读自文件本身，解包不受本地常量约束，这样换版本或换实现也能恢复。
+  const envelope = await sealBackup(contents, 'correct horse battery');
+  const relaxed = { ...envelope, kdf: { ...envelope.kdf, iterations: 20_000 } };
+  // 参数校验必须放行较低的迭代数（口令不符会在解密阶段报错，而不是参数阶段）。
+  assert.doesNotThrow(() => parseEnvelope(JSON.parse(JSON.stringify(relaxed))));
+});
+
 test('拒绝非法备份文件', () => {
   assert.throws(() => parseEnvelope({ format: 'other' }), /不是 EdgeSSH 备份文件/);
   assert.throws(() => parseEnvelope({ format: 'edgessh-backup', version: 99 }), /版本不受支持/);
@@ -44,6 +64,12 @@ test('拒绝非法备份文件', () => {
   assert.throws(() => parseEnvelope({
     format: 'edgessh-backup', version: 1, createdAt: 1,
     kdf: { name: 'PBKDF2', hash: 'SHA-256', iterations: 90_000_000, salt: 'x' },
+    cipher: 'AES-GCM', iv: 'x', ciphertext: 'x',
+  }), /密钥参数无效/);
+  // 迭代数过低同样拒绝，避免接受被刻意弱化的备份文件。
+  assert.throws(() => parseEnvelope({
+    format: 'edgessh-backup', version: 1, createdAt: 1,
+    kdf: { name: 'PBKDF2', hash: 'SHA-256', iterations: 1000, salt: 'x' },
     cipher: 'AES-GCM', iv: 'x', ciphertext: 'x',
   }), /密钥参数无效/);
 });

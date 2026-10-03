@@ -212,9 +212,15 @@ export async function runBackup(
     try { await prune(settings); } catch { /* 清理旧包失败不影响本次备份 */ }
     return { id: '', ...run };
   } catch (error) {
-    const message = error instanceof APIError ? error.message : '备份失败，请稍后重试。';
+    // 非 APIError 多为运行时限制或实现缺陷（例如 PBKDF2 迭代数超出 Workers 上限）。
+    // 把异常类型与消息一并记入历史并打到日志，否则界面只剩无法排查的兜底文案。
+    const message = error instanceof APIError
+      ? error.message
+      : `备份失败：${error instanceof Error ? `${error.name}: ${error.message}` : String(error)}`;
+    if (!(error instanceof APIError)) console.error('backup failed', error);
     await recordRun(env, accountId, {
-      startedAt, trigger, status: 'failure', remoteName: null, size: null, counts: null, error: message,
+      startedAt, trigger, status: 'failure', remoteName: null, size: null, counts: null,
+      error: message.slice(0, 500),
     });
     throw error instanceof APIError ? error : new APIError(message, 502);
   }

@@ -92,7 +92,15 @@ export async function backupRoute(request: Request, env: Env, accountId: string,
     const body = await readJSON(request);
     const passphrase = validatePassphrase(body.passphrase);
     const contents = await collectBackup(env, accountId);
-    const envelope = await sealBackup(contents, passphrase);
+    let envelope;
+    try {
+      envelope = await sealBackup(contents, passphrase);
+    } catch (error) {
+      // 同 runBackup：加密失败多为运行时限制，保留真实原因而不是回一个通用 500。
+      if (error instanceof APIError) throw error;
+      console.error('backup export failed', error);
+      throw new APIError(`导出失败：${error instanceof Error ? `${error.name}: ${error.message}` : String(error)}`, 500);
+    }
     return json({ envelope, filename: remoteName('edgessh', envelope.createdAt), counts: backupCounts(contents) });
   }
 
